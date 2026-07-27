@@ -1,0 +1,39 @@
+study:
+  name: "qwen3_30b_a100"
+  n_trials: 50
+  sampler: "tpe"           # tpe or botorch
+  metric: "output_tokens_per_second"
+  direction: "maximize"    # maximize or minimize
+  percentile: "median"     # median, mean, p95, p99
+
+benchmark:
+  model: "RedHatAI/Qwen3-30B-A3B-FP8-dynamic"
+  max_seconds: 300
+  prompt_tokens: 2000
+  output_tokens: 1000
+  rate: 10
+  request_format: "/v1/chat/completions"
+
+parameters:
+  max_num_batched_tokens:
+    min: 2048
+    max: 8192
+    step: 512
+  gpu_memory_utilization:
+    min: 0.90
+    max: 0.95
+    step: 0.01
+  kv_cache_dtype:
+    options: ["auto", "fp8"]
+  block_size:
+    options: [8, 16, 32]
+  max_seq_len_to_capture:
+    min: 4096
+    max: 8192
+    step: 1024
+
+static_params:
+  enforce-eager: false
+
+env_vars:
+  VLLM_USE_V1: "1"
