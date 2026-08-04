@@ -111,15 +111,22 @@ def build_vllm_cmd(config, trial_params, port):
     return cmd
 
 
-def start_vllm(cmd, env_vars=None):
+def start_vllm(cmd, env_vars=None, log_dir=None):
     env = os.environ.copy()
     if env_vars:
         env.update({k: str(v) for k, v in env_vars.items()})
-    return subprocess.Popen(
+    stderr_dest = subprocess.DEVNULL
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, f"vllm_{cmd[cmd.index('--port') + 1]}.log")
+        stderr_dest = open(log_path, "w")
+    proc = subprocess.Popen(
         cmd, env=env,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=stderr_dest,
         start_new_session=True,
     )
+    proc._log_path = log_path if log_dir else None
+    return proc
 
 
 def wait_healthy(port, proc, timeout=300, interval=2):
@@ -251,23 +258,28 @@ def check_latency_cap(results, config):
         return True
 
 
-def _execute_trial(config, trial_params):
+def _execute_trial(config, trial_params, log_dir=None):
     port = find_free_port()
     cmd = build_vllm_cmd(config, trial_params, port)
     log.info("vllm cmd: %s", " ".join(cmd))
-    proc = start_vllm(cmd, config.get("env_vars"))
+    proc = start_vllm(cmd, config.get("env_vars"), log_dir=log_dir)
     try:
         timeout = config["server"].get("startup_timeout", 300)
         if not wait_healthy(port, proc, timeout):
-            raise RuntimeError(f"vLLM not healthy after {timeout}s")
+            hint = ""
+            if proc._log_path and os.path.exists(proc._log_path):
+                with open(proc._log_path) as f:
+                    tail = f.read()[-1000:]
+                hint = f"\nvLLM stderr (last 1000 chars):\n{tail}"
+            raise RuntimeError(f"vLLM not healthy after {timeout}s{hint}")
         return run_guidellm(config, port)
     finally:
         kill_vllm(proc)
 
 
-def run_baseline(config):
+def run_baseline(config, log_dir=None):
     log.info("Running baseline (vLLM defaults)...")
-    results = _execute_trial(config, {})
+    results = _execute_trial(config, {}, log_dir=log_dir)
     val = extract_metric(
         results, config["study"]["metric"], config["study"]["percentile"]
     )
@@ -275,12 +287,12 @@ def run_baseline(config):
     return val
 
 
-def objective(trial, config, baseline_metric):
+def objective(trial, config, baseline_metric, log_dir=None):
     params = suggest_params(trial, config)
     log.info("Trial %d: %s", trial.number, params)
 
     try:
-        results = _execute_trial(config, params)
+        results = _execute_trial(config, params, log_dir=log_dir)
     except RuntimeError as e:
         log.warning("Trial %d failed: %s", trial.number, e)
         raise optuna.TrialPruned(str(e))
@@ -474,6 +486,7 @@ def main():
     base = Path(__file__).parent
     output_dir = args.output_dir or str(base / "configs")
     checkpoint_dir = os.path.join(output_dir, "checkpoints")
+    vllm_log_dir = os.path.join(output_dir, "logs")
 
     if args.dry_run:
         study = optuna.create_study(direction=config["study"]["direction"])
@@ -487,7 +500,7 @@ def main():
             study.tell(trial, 0.0)
         return
 
-    baseline = run_baseline(config)
+    baseline = run_baseline(config, log_dir=vllm_log_dir)
 
     study = optuna.create_study(
         study_name=config["study"]["name"],
@@ -499,7 +512,7 @@ def main():
 
     try:
         study.optimize(
-            partial(objective, config=config, baseline_metric=baseline),
+            partial(objective, config=config, baseline_metric=baseline, log_dir=vllm_log_dir),
             n_trials=config["study"].get("n_trials", 30),
             callbacks=[make_checkpoint_callback(config, checkpoint_dir)],
         )
