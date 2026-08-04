@@ -225,7 +225,14 @@ def extract_metric(results, metric, percentile):
 
     if isinstance(stats, (int, float)):
         return float(stats)
+
+    # GuideLLM 0.7.x nests: metric → category → percentile
+    # Use "total" for throughput, "successful" for latency
     if percentile not in stats:
+        for category in ("total", "successful"):
+            if category in stats and isinstance(stats[category], dict):
+                if percentile in stats[category]:
+                    return float(stats[category][percentile])
         raise KeyError(
             f"Percentile '{percentile}' not in {metric}. "
             f"Available: {list(stats.keys())}"
