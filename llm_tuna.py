@@ -111,21 +111,24 @@ def build_vllm_cmd(config, trial_params, port):
     return cmd
 
 
-def start_vllm(cmd, env_vars=None, log_dir=None):
+def start_vllm(cmd, env_vars=None, log_dir=None, verbose=False):
     env = os.environ.copy()
     if env_vars:
         env.update({k: str(v) for k, v in env_vars.items()})
-    stderr_dest = subprocess.DEVNULL
-    if log_dir:
+    if verbose:
+        stderr_dest = None
+    elif log_dir:
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, f"vllm_{cmd[cmd.index('--port') + 1]}.log")
         stderr_dest = open(log_path, "w")
+    else:
+        stderr_dest = subprocess.DEVNULL
     proc = subprocess.Popen(
         cmd, env=env,
         stdout=subprocess.DEVNULL, stderr=stderr_dest,
         start_new_session=True,
     )
-    proc._log_path = log_path if log_dir else None
+    proc._log_path = (log_dir and not verbose) and log_path or None
     return proc
 
 
@@ -167,24 +170,22 @@ def kill_vllm(proc):
 def run_guidellm(config, port):
     bench = config["benchmark"]
     data = bench["data"]
+    max_seconds = bench.get("max_seconds", 120)
+    rate_type = bench.get("rate_type", "concurrent")
+    rate = bench.get("rate", 10)
 
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         output_path = f.name
 
-    data_str = (
-        f"prompt_tokens={data['prompt_tokens']},"
-        f"generated_tokens={data['output_tokens']}"
-    )
+    profile_key = "streams" if rate_type == "concurrent" else "rate"
 
     cmd = [
-        "guidellm", "benchmark",
-        "--target", f"http://localhost:{port}/v1",
-        "--model", config["server"]["model"],
-        "--max-seconds", str(bench.get("max_seconds", 120)),
-        "--rate-type", bench.get("rate_type", "concurrent"),
-        "--rate", str(bench.get("rate", 10)),
-        "--output-path", output_path,
-        "--data", data_str,
+        "guidellm", "run",
+        "--backend", f"kind=openai_http,target=http://localhost:{port}/v1,model={config['server']['model']}",
+        "--data", f"kind=synthetic_text,prompt_tokens={data['prompt_tokens']},output_tokens={data['output_tokens']}",
+        "--profile", f"kind={rate_type},{profile_key}={rate}",
+        "--constraint", f"kind=max_duration,seconds={max_seconds}",
+        "--output", f"kind=json,path={output_path}",
     ]
 
     try:
@@ -258,11 +259,11 @@ def check_latency_cap(results, config):
         return True
 
 
-def _execute_trial(config, trial_params, log_dir=None):
+def _execute_trial(config, trial_params, log_dir=None, verbose=False):
     port = find_free_port()
     cmd = build_vllm_cmd(config, trial_params, port)
     log.info("vllm cmd: %s", " ".join(cmd))
-    proc = start_vllm(cmd, config.get("env_vars"), log_dir=log_dir)
+    proc = start_vllm(cmd, config.get("env_vars"), log_dir=log_dir, verbose=verbose)
     try:
         timeout = config["server"].get("startup_timeout", 300)
         if not wait_healthy(port, proc, timeout):
@@ -277,9 +278,9 @@ def _execute_trial(config, trial_params, log_dir=None):
         kill_vllm(proc)
 
 
-def run_baseline(config, log_dir=None):
+def run_baseline(config, log_dir=None, verbose=False):
     log.info("Running baseline (vLLM defaults)...")
-    results = _execute_trial(config, {}, log_dir=log_dir)
+    results = _execute_trial(config, {}, log_dir=log_dir, verbose=verbose)
     val = extract_metric(
         results, config["study"]["metric"], config["study"]["percentile"]
     )
@@ -287,12 +288,12 @@ def run_baseline(config, log_dir=None):
     return val
 
 
-def objective(trial, config, baseline_metric, log_dir=None):
+def objective(trial, config, baseline_metric, log_dir=None, verbose=False):
     params = suggest_params(trial, config)
     log.info("Trial %d: %s", trial.number, params)
 
     try:
-        results = _execute_trial(config, params, log_dir=log_dir)
+        results = _execute_trial(config, params, log_dir=log_dir, verbose=verbose)
     except RuntimeError as e:
         log.warning("Trial %d failed: %s", trial.number, e)
         raise optuna.TrialPruned(str(e))
@@ -472,6 +473,10 @@ def main():
         "--output-dir", default=None,
         help="Results directory (default: configs/ next to this script)",
     )
+    parser.add_argument(
+        "--verbose", action="store_true",
+        help="Stream vLLM stderr to terminal (see startup progress)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -500,7 +505,7 @@ def main():
             study.tell(trial, 0.0)
         return
 
-    baseline = run_baseline(config, log_dir=vllm_log_dir)
+    baseline = run_baseline(config, log_dir=vllm_log_dir, verbose=args.verbose)
 
     study = optuna.create_study(
         study_name=config["study"]["name"],
@@ -512,7 +517,7 @@ def main():
 
     try:
         study.optimize(
-            partial(objective, config=config, baseline_metric=baseline, log_dir=vllm_log_dir),
+            partial(objective, config=config, baseline_metric=baseline, log_dir=vllm_log_dir, verbose=args.verbose),
             n_trials=config["study"].get("n_trials", 30),
             callbacks=[make_checkpoint_callback(config, checkpoint_dir)],
         )
