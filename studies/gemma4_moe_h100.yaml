@@ -12,7 +12,6 @@ server:
   model: "google/gemma-4-26B-A4B-it"
   tensor_parallel_size: 1
   startup_timeout: 600
-  language-model-only: true
 
 benchmark:
   max_seconds: 120
@@ -28,7 +27,8 @@ parameters:
     max: 131072
     step: 4096
 
-static_params: {}
+static_params:
+  language-model-only: true
 
 env_vars:
   VLLM_USE_V1: "1"
