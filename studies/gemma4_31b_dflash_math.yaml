@@ -11,7 +11,7 @@ study:
   strategy: "high_throughput"
 
 server:
-  model: "RedHatAI/gemma-4-31B-it-speculator.dflash"
+  model: "google/gemma-4-31B-it"
   tensor_parallel_size: 2
   startup_timeout: 600
 
@@ -24,13 +24,13 @@ benchmark:
     output_tokens: 500
 
 parameters:
-  spec-tokens:
-    min: 3
-    max: 10
-    step: 1
+  max-num-batched-tokens:
+    min: 2048
+    max: 32768
+    step: 4096
 
 static_params:
-  spec-tokens: 8
+  speculative-config: '{"model": "RedHatAI/gemma-4-31B-it-speculator.dflash", "num_speculative_tokens": 8, "method": "dflash"}'
   no-enable-prefix-caching: true
   max-model-len: 4096
   enforce-eager: true
