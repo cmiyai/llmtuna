@@ -24,7 +24,6 @@ parameters:
     min: 2048
     max: 63488
     step: 4096
-  enable_cuda_graphs: true
 
 static_params: {}
 
