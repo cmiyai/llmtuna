@@ -1,0 +1,40 @@
+# Gemma 4 31B + DFlash speculator on H100
+# DFlash uses the speculator as the main model (it loads the base internally).
+# Optimize num_speculative_tokens for math reasoning workload.
+# Acceptance rates from model card: math_reasoning avg length 5.17,
+# drops below 35% after position 5 — sweet spot is 5-8.
+
+study:
+  name: "gemma4_31b_dflash_math"
+  n_trials: 20
+  n_startup_trials: 5
+  strategy: "high_throughput"
+
+server:
+  model: "RedHatAI/gemma-4-31B-it-speculator.dflash"
+  tensor_parallel_size: 2
+  startup_timeout: 600
+
+benchmark:
+  max_seconds: 120
+  rate: 8
+  rate_type: "constant"
+  data:
+    prompt_tokens: 2000
+    output_tokens: 500
+
+parameters:
+  num-speculative-tokens:
+    min: 3
+    max: 10
+    step: 1
+
+static_params:
+  num-speculative-tokens: 8
+  no-enable-prefix-caching: true
+  max-model-len: 4096
+  enforce-eager: true
+
+env_vars:
+  VLLM_USE_V1: "1"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
