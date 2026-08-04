@@ -29,6 +29,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 from functools import partial
@@ -133,6 +134,49 @@ def start_vllm(cmd, env_vars=None, log_dir=None, verbose=False):
     )
     proc._log_path = (log_dir and not verbose) and log_path or None
     return proc
+
+
+class GpuMemoryMonitor:
+    """Polls nvidia-smi in a background thread and logs per-GPU VRAM usage."""
+
+    def __init__(self, interval=2):
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self):
+        self._thread = threading.Thread(target=self._poll, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=3)
+
+    def _poll(self):
+        while not self._stop.is_set():
+            try:
+                out = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=index,memory.used,memory.total",
+                     "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if out.returncode == 0:
+                    parts = []
+                    for line in out.stdout.strip().splitlines():
+                        idx, used, total = [x.strip() for x in line.split(",")]
+                        parts.append(f"GPU{idx}: {used}/{total} MiB")
+                    log.info("VRAM: %s", "  |  ".join(parts))
+            except Exception:
+                pass
+            self._stop.wait(self._interval)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stop()
 
 
 def wait_healthy(port, proc, timeout=300, interval=2):
@@ -278,13 +322,14 @@ def _execute_trial(config, trial_params, log_dir=None, verbose=False):
     proc = start_vllm(cmd, config.get("env_vars"), log_dir=log_dir, verbose=verbose)
     try:
         timeout = config["server"].get("startup_timeout", 300)
-        if not wait_healthy(port, proc, timeout):
-            hint = ""
-            if proc._log_path and os.path.exists(proc._log_path):
-                with open(proc._log_path) as f:
-                    tail = f.read()[-1000:]
-                hint = f"\nvLLM stderr (last 1000 chars):\n{tail}"
-            raise RuntimeError(f"vLLM not healthy after {timeout}s{hint}")
+        with GpuMemoryMonitor(interval=3):
+            if not wait_healthy(port, proc, timeout):
+                hint = ""
+                if proc._log_path and os.path.exists(proc._log_path):
+                    with open(proc._log_path) as f:
+                        tail = f.read()[-1000:]
+                    hint = f"\nvLLM stderr (last 1000 chars):\n{tail}"
+                raise RuntimeError(f"vLLM not healthy after {timeout}s{hint}")
         return run_guidellm(config, port)
     finally:
         kill_vllm(proc)
