@@ -30,6 +30,7 @@ parameters:
 static_params:
   language-model-only: true
   max-model-len: 8192
+  enforce-eager: true
 
 env_vars:
   VLLM_USE_V1: "1"
