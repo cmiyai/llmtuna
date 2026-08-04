@@ -1,0 +1,32 @@
+# gpt-oss-20b on 1x H100 80GB — high throughput study
+
+study:
+  name: "gpt_oss_20b_h100"
+  n_trials: 20
+  n_startup_trials: 5
+  strategy: "high_throughput"
+
+server:
+  model: "openai/gpt-oss-20b"
+  tensor_parallel_size: 1
+  startup_timeout: 300
+
+benchmark:
+  max_seconds: 120
+  rate: 20
+  rate_type: "concurrent"
+  data:
+    prompt_tokens: 1000
+    output_tokens: 500
+
+parameters:
+  max_num_batched_tokens:
+    min: 2048
+    max: 63488
+    step: 4096
+  enable_cuda_graphs: true
+
+static_params: {}
+
+env_vars:
+  VLLM_USE_V1: "1"
