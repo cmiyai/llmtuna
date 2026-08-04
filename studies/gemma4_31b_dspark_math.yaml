@@ -1,0 +1,38 @@
+# Gemma 4 31B + RedHatAI DSpark speculator on 2x H100
+# Optimize num_speculative_tokens for math reasoning workload.
+# Baseline to beat: ~2.2ms median ITL / ~4.5x speedup at 8 RPS
+# from the model card default of --spec-tokens 7.
+
+study:
+  name: "gemma4_31b_dspark_math"
+  n_trials: 20
+  n_startup_trials: 5
+  strategy: "high_throughput"
+
+server:
+  model: "google/gemma-4-31B-it"
+  tensor_parallel_size: 2
+  startup_timeout: 600
+
+benchmark:
+  max_seconds: 120
+  rate: 8
+  rate_type: "constant"
+  data:
+    prompt_tokens: 2000
+    output_tokens: 500
+
+parameters:
+  num_speculative_tokens:
+    min: 3
+    max: 10
+    step: 1
+
+static_params:
+  spec-model: "RedHatAI/gemma-4-31B-it-speculator.dspark"
+  spec-method: "dspark"
+  disable-log-requests: true
+  no-enable-prefix-caching: true
+
+env_vars:
+  VLLM_USE_V1: "1"

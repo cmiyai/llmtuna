@@ -249,6 +249,8 @@ def suggest_params(trial, config):
     for name, spec in config["parameters"].items():
         if isinstance(spec, bool):
             params[name] = trial.suggest_categorical(name, [True, False])
+        elif isinstance(spec, list):
+            params[name] = trial.suggest_categorical(name, spec)
         elif isinstance(spec, dict):
             params[name] = trial.suggest_int(
                 name, spec["min"], spec["max"], step=spec.get("step", 1)
