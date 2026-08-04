@@ -23,7 +23,7 @@ benchmark:
     output_tokens: 500
 
 parameters:
-  spec_tokens:
+  spec-tokens:
     min: 3
     max: 10
     step: 1
