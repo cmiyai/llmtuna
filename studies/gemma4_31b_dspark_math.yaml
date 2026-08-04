@@ -34,7 +34,8 @@ static_params:
   spec-tokens: 7
   no-enable-prefix-caching: true
   gpu-memory-utilization: 0.90
-  compilation-config: '{"cudagraph_capture_sizes": [1, 2, 4, 8, 16, 32, 64, 128, 256]}'
+  enforce-eager: true
 
 env_vars:
-  VLLM_USE_V1: "1"
+    VLLM_USE_V1: "1"
+    VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
