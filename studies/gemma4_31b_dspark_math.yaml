@@ -33,6 +33,7 @@ static_params:
   spec-method: "dspark"
   spec-tokens: 7
   no-enable-prefix-caching: true
+  gpu-memory-utilization: 0.85
 
 env_vars:
   VLLM_USE_V1: "1"
