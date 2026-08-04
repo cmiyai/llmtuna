@@ -1,0 +1,34 @@
+# Gemma 4 26B-A4B MoE on 1x H100 80GB
+# 128 fine-grained experts, top-8 routing, 64GB VRAM minimum.
+# Long sequences + high concurrency to stress batching decisions.
+
+study:
+  name: "gemma4_moe_h100"
+  n_trials: 25
+  n_startup_trials: 5
+  strategy: "high_throughput"
+
+server:
+  model: "google/gemma-4-26B-A4B-it"
+  tensor_parallel_size: 1
+  startup_timeout: 600
+  language-model-only: true
+
+benchmark:
+  max_seconds: 120
+  rate: 35
+  rate_type: "concurrent"
+  data:
+    prompt_tokens: 4000
+    output_tokens: 500
+
+parameters:
+  max_num_batched_tokens:
+    min: 2048
+    max: 131072
+    step: 4096
+
+static_params: {}
+
+env_vars:
+  VLLM_USE_V1: "1"
