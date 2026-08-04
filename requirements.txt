@@ -1,3 +1,7 @@
+# Core deps for llm-tuna.
+# vLLM and GuideLLM are runtime dependencies (must be installed on the
+# target machine) but are NOT listed here — they're invoked as CLI
+# subprocesses, not imported as Python libraries.
 optuna>=3.0.0
 pyyaml>=6.0
 requests>=2.28.0

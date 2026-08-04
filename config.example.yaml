@@ -1,39 +1,62 @@
+# llm-tuna config — tells the optimizer what to tune, how to benchmark,
+# and what metric to chase.
+#
+# Flow: main() loads this → creates Optuna study from [study] →
+#       each trial builds a vLLM command from [server] + [parameters] + [static_params],
+#       then benchmarks it using [benchmark] settings.
+
 study:
-  name: "qwen3_30b_a100"
-  n_trials: 50
-  sampler: "tpe"           # tpe or botorch
-  metric: "output_tokens_per_second"
-  direction: "maximize"    # maximize or minimize
-  percentile: "median"     # median, mean, p95, p99
+  name: "qwen3_30b_h100"       # Optuna study name (shows in logs)
+  n_trials: 30                  # total trials including startup randoms
+  n_startup_trials: 5           # random exploration before TPE kicks in
 
-benchmark:
+  # Strategy presets — pick one. Each sets the metric, direction, and
+  # percentile automatically. The user still controls ISL/OSL/concurrency
+  # in the benchmark section below.
+  #
+  #   high_throughput  → maximize median output_tokens_per_second
+  #   low_latency      → minimize p95 time_to_first_token_ms
+  #   balanced         → maximize median output_tokens_per_second
+  #                      subject to p95 time_to_first_token_ms < latency_cap_ms
+  strategy: "high_throughput"
+
+  # Only used when strategy=balanced. Trials where p95 TTFT exceeds this
+  # cap are pruned — Optuna learns to avoid high-latency regions.
+  latency_cap_ms: 500
+
+# vLLM server config — these go into every `vllm serve` invocation.
+# The port is auto-assigned per trial; don't set it here.
+server:
   model: "RedHatAI/Qwen3-30B-A3B-FP8-dynamic"
-  max_seconds: 300
-  prompt_tokens: 2000
-  output_tokens: 1000
-  rate: 10
-  request_format: "/v1/chat/completions"
+  tensor_parallel_size: 2
+  startup_timeout: 300          # seconds to wait for /health 200 OK
 
+# GuideLLM benchmark config — controls the workload shape.
+# Runs after vLLM is healthy, results feed back to Optuna.
+# ISL/OSL and concurrency are always user-defined — the strategy preset
+# only determines which metric gets optimized, not the workload.
+benchmark:
+  max_seconds: 120              # benchmark duration per trial
+  rate: 10                      # number of concurrent requests
+  rate_type: "concurrent"       # "concurrent" or "constant"
+  data:
+    prompt_tokens: 2000         # synthetic input sequence length
+    output_tokens: 1000         # synthetic output sequence length
+
+# Tunable parameters — Optuna searches over these.
+# v1: max_num_batched_tokens (int range) + enable_cuda_graphs (bool toggle).
 parameters:
   max_num_batched_tokens:
     min: 2048
-    max: 8192
-    step: 512
-  gpu_memory_utilization:
-    min: 0.90
-    max: 0.95
-    step: 0.01
-  kv_cache_dtype:
-    options: ["auto", "fp8"]
-  block_size:
-    options: [8, 16, 32]
-  max_seq_len_to_capture:
-    min: 4096
-    max: 8192
-    step: 1024
+    max: 131072
+    step: 4096
+  enable_cuda_graphs: true      # bool — Optuna tries true vs false
 
+# Fixed vLLM flags applied to every trial (not tuned).
+# Keys are CLI flag names with hyphens (e.g. disable-log-requests → --disable-log-requests).
 static_params:
-  enforce-eager: false
+  disable-log-requests: true
 
+# Environment variables set on the vLLM subprocess.
 env_vars:
   VLLM_USE_V1: "1"

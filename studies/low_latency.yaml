@@ -1,0 +1,35 @@
+# Low latency study — minimize p95 time-to-first-token.
+# Use case: interactive chatbot, copilot, real-time assistant.
+# Workload: low concurrency, short inputs, short outputs.
+
+study:
+  name: "qwen3_30b_latency"
+  n_trials: 30
+  n_startup_trials: 5
+  strategy: "low_latency"
+
+server:
+  model: "RedHatAI/Qwen3-30B-A3B-FP8-dynamic"
+  tensor_parallel_size: 2
+  startup_timeout: 300
+
+benchmark:
+  max_seconds: 120
+  rate: 5
+  rate_type: "concurrent"
+  data:
+    prompt_tokens: 512
+    output_tokens: 256
+
+parameters:
+  max_num_batched_tokens:
+    min: 2048
+    max: 32768
+    step: 2048
+  enable_cuda_graphs: true
+
+static_params:
+  disable-log-requests: true
+
+env_vars:
+  VLLM_USE_V1: "1"
