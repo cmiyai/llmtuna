@@ -31,7 +31,6 @@ parameters:
 static_params:
   spec-model: "RedHatAI/gemma-4-31B-it-speculator.dspark"
   spec-method: "dspark"
-  disable-log-requests: true
   no-enable-prefix-caching: true
 
 env_vars:
