@@ -24,11 +24,12 @@ benchmark:
 parameters:
   max_num_batched_tokens:
     min: 2048
-    max: 131072
-    step: 4096
+    max: 32768
+    step: 2048
 
 static_params:
   language-model-only: true
+  max-model-len: 8192
 
 env_vars:
   VLLM_USE_V1: "1"
