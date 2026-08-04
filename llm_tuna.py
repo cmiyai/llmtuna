@@ -101,7 +101,10 @@ def build_vllm_cmd(config, trial_params, port):
         else:
             cmd.extend([f"--{flag}", str(val)])
 
+    trial_flags = {k.replace("_", "-") for k in trial_params}
     for key, val in config.get("static_params", {}).items():
+        if key in trial_flags:
+            continue
         if isinstance(val, bool):
             if val:
                 cmd.append(f"--{key}")

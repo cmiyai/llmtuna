@@ -23,7 +23,7 @@ benchmark:
     output_tokens: 500
 
 parameters:
-  num_speculative_tokens:
+  spec_tokens:
     min: 3
     max: 10
     step: 1
@@ -31,6 +31,7 @@ parameters:
 static_params:
   spec-model: "RedHatAI/gemma-4-31B-it-speculator.dspark"
   spec-method: "dspark"
+  spec-tokens: 7
   no-enable-prefix-caching: true
 
 env_vars:
