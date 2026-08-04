@@ -11,7 +11,7 @@ study:
 
 server:
   model: "google/gemma-4-31B-it"
-  tensor_parallel_size: 2
+  tensor_parallel_size: 4
   startup_timeout: 600
 
 benchmark:
