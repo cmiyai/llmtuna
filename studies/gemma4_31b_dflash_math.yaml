@@ -24,13 +24,13 @@ benchmark:
     output_tokens: 500
 
 parameters:
-  num-speculative-tokens:
+  spec-tokens:
     min: 3
     max: 10
     step: 1
 
 static_params:
-  num-speculative-tokens: 8
+  spec-tokens: 8
   no-enable-prefix-caching: true
   max-model-len: 4096
   enforce-eager: true
