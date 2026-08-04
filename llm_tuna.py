@@ -322,7 +322,10 @@ def _execute_trial(config, trial_params, log_dir=None, verbose=False):
     proc = start_vllm(cmd, config.get("env_vars"), log_dir=log_dir, verbose=verbose)
     try:
         timeout = config["server"].get("startup_timeout", 300)
-        with GpuMemoryMonitor(interval=3):
+        monitor = GpuMemoryMonitor(interval=3) if verbose else None
+        if monitor:
+            monitor.start()
+        try:
             if not wait_healthy(port, proc, timeout):
                 hint = ""
                 if proc._log_path and os.path.exists(proc._log_path):
@@ -330,6 +333,9 @@ def _execute_trial(config, trial_params, log_dir=None, verbose=False):
                         tail = f.read()[-1000:]
                     hint = f"\nvLLM stderr (last 1000 chars):\n{tail}"
                 raise RuntimeError(f"vLLM not healthy after {timeout}s{hint}")
+        finally:
+            if monitor:
+                monitor.stop()
         return run_guidellm(config, port)
     finally:
         kill_vllm(proc)

@@ -33,9 +33,8 @@ static_params:
   spec-method: "dspark"
   spec-tokens: 7
   no-enable-prefix-caching: true
-  gpu-memory-utilization: 0.90
-  enforce-eager: true
+  max-model-len: 4096
 
 env_vars:
-    VLLM_USE_V1: "1"
-    VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
+  VLLM_USE_V1: "1"
+  PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
