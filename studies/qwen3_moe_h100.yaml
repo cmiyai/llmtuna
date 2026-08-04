@@ -1,0 +1,32 @@
+# Qwen3-30B-A3B MoE on 1x H100 80GB — long sequence, high concurrency
+# This is the workload shape where the paper saw +32.9% gains.
+
+study:
+  name: "qwen3_moe_h100"
+  n_trials: 25
+  n_startup_trials: 5
+  strategy: "high_throughput"
+
+server:
+  model: "Qwen/Qwen3-30B-A3B"
+  tensor_parallel_size: 1
+  startup_timeout: 600
+
+benchmark:
+  max_seconds: 120
+  rate: 35
+  rate_type: "concurrent"
+  data:
+    prompt_tokens: 4000
+    output_tokens: 500
+
+parameters:
+  max_num_batched_tokens:
+    min: 2048
+    max: 131072
+    step: 4096
+
+static_params: {}
+
+env_vars:
+  VLLM_USE_V1: "1"
